@@ -14,112 +14,64 @@ IMP++の意味論を持つ第四章レッスン7からの`imp.k`ファイルを�
 
 最後に、`Stmt`の合成適用を表す構造の引数が全部左から右へ正確的に評価されないとならないので`seqstrict`にします。なぜならば、右側にある二番目の引数が何かの代入文と仮定してご覧下さい。その文は型の環境を変えられますね。
 
+それで、本物の型を定義する所に来ました。実は、型確認装置の文脈で、「型」を定義することは「計算の結果」を定義する事と同じです。今回の簡単である命令形プログラミング言語なら、いくつかの定数型だけ持っています： `int`, `bool`, `string`, `block`, `stmt`があります。
 
-******** ここまで確認した
-**********
+型確認装置の`configuration`も定義しましょう。`<k/>`セル以上、「型の環境(type environment)」を表す`<tenv/>`セルも加えます。この環境はプログラムの識別子から型までのマッピングを保存します。それに伴って、型の環境は「型の抽象領域に存在している状態」というようにも考えられます。
 
+既にある値対定義されている意味論を型システム向けのものまで変化していきましょう。この意味論で手に入れたい機能は：
 
-We continue by defining the new results of computations, that is, the actual
-types.  In this simple imperative language, we only have a few constant types:
-`int`, `bool`, `string`, `block` and `stmt`.
+1. 言語の基本値を適当な型まで縮小すること
+2. 言語に定義される構造が型まで縮小された項を引数として受けている時、その構造を適当な型まで縮小すること
 
-We next define the new configuration, which is actually quite simple.  Besides
-the `<k/>` cell, all we need is a type environment cell, `<tenv/>`, which will
-hold a map from identifiers to their types.  A type environment is therefore
-like a state in the abstract domain of type values.
+何も忘れないため、上から始めて下まで進んでいきます。
 
-Let us next modify the semantic rules, turning them into a type system.  In
-short, the idea is to reduce the basic values to their types, and then have a
-rule for each language construct reducing it to its result type whenever its
-arguments have the expected types.
+整数と文字列はそれぞれ`int`, `string`型まで縮小します。
 
-We write the rules in the order given by the syntax declarations, to make
-sure we do not forget any construct.
+変数は型の環境を表す`<tenv/>`に検索されるだけです。IMP++の変数は整数以上のソート対束縛出来ないので、`tenv`にある物は`int`だけですけど、後でなにかの型宣言を加えたいようになったらなにも変える必要が出ないため、この規則を汎用的に書いていきます。与えられた意味論なら、宣言されていない変数を検索してみるプログラムは却下されて、この定義が暗黙的に使用する「却下」の解釈は*書き換えることが詰まっていて、進めないようになってしまいました*って言うことです。
 
-Integers reduce to their type, `int`.
+変数を増やす`++X`は変数が`int`だから、そっちこそ`int`になります。
 
-So do the strings.
+標準入力の内容を読んでくれる`read`は今回正数しか読めないので、結局`int`になります。
 
-Variables are now looked up in the type environment and reduced to their type 
-there.  Since we only declare integer variables in IMP++, their type in `tenv` 
-will always be `int`.  Nevertheless, we write the rule generically, so that we 
-would not have to change it later if we add other type declarations to IMP++.
-Note that we reject programs which lookup undeclared variables.  Rejection,
-in this case, means *rewriting getting stuck*.
+除算も`int`になる引数しか受けないので、`int`になりますが、除算をよく見たら、`/`記号は`AExp`対定義されているので、`int / int`のような計算がパーサーに却下されないため、`int`をAExpの構文につかすることが必要となります。「型」の項をどこにも問題なく書けるようになりたいんですね。そのため、`Type`を他の全ソートのsubtermとして書いていきます(つまり、AExpなどのソート定義の右側にTypeを加えます)。
 
-Variable increment types to `int`, provided the variable has type `int`.
+足し算は正数と文字列でオーバロードされているので、型を付ける規則を２つ書いていかないとね。
 
-Read types to `int`, because we only allow integer input.
+`spawn`は、引数としてあるコードが`block`まで縮小された後、`stmt`になります。
 
-Division is only allowed on integers, so it rewrites to `int` provided that its
-arguments rewrite to `int`.  Note, however, that in order to write `int / int`,
-we have to explicitly add `int` to the syntax of arithmetic expressions.
-Otherwise, the K parser rightfully complains, because `/` was declared on
-arithmetic expressions, not on types.  One simple and generic way to allow
-types to appear anywhere, is to define `Type` as a syntactic subcategory of all
-the other syntactic categories.  Let's do it on a by-need basis, though.
+変数代入を処理する構造は`strict(2)`で定義されるので、型を付けるポリシーは簡単に「束縛している識別子は右側の項と同じ型の物として考えて」ということです。今回も可能な限り汎用的に定義します。
 
-Addition is overloaded, so we add two typing rules for it: one for integers
-and another for strings.
+真偽値の規則はかなり明示的と思います。
 
-As discussed, `spawn` types to `stmt` provided that its argument types to
-`block`.
+少しだですが、ブロックの規則はより複雑です。最初の気をつけていかなければならない部分は、ブロックレベルの変数は外の範囲に見えない特徴を守るため、ブロックに型が付いた後、環境を今回も復旧作業が必要です。ブロック内の文が型になるまで、環境を復旧しません。型まで評価されたら、環境を復旧する時点で、`block`型のアイテムとして書き換えます。
 
-The assignment construct was `strict(2)`; its typing policy is that the declared
-type of `X` should be identical to the type of the assigned value.  Like for
-lookup, we define this rule more generically than needed for IMP++, for any 
-type, not only for `int`.
+ブロック中のコードはそっちこそブロックとしてある可能性もちゃんと処理しないとね(例えば `{ {S} }`)。独自の規則を作ることの代わりに、`block`と`stmt`型を新たな`BlockOrStmtType`型に組み合わせることで一石二鳥になります。`Type`の元定義にも`block`と`stmt`を`BlockOrStmtType`サブソートにしていきます。
 
-The typing rules for Boolean expression constructs are in the same spirit.
-Note that we need only one rule for `&&`.
+IMP++で、`int`になる数学的な表現を文のなかに許すので、表現・expressionの文は思い通りに型まで評価します。
 
-The typing of blocks is a bit trickier.  First, note that we still need to
-recover the environment after the block is typed, because we do not want the
-block-local variables to be visible in the outer type environment.  We recover
-the type environment only after the block-enclosed statements type; moreover,
-we also opportunistically yield a `block` type on the computation when we
-discard the type environment recovery item.  To account for the fact that the
-block-enclosed statement can itself be a block (e.g., `{{S}}`), we would need an
-additional rule.  Since we do not like repetition, we instead group the types
-`block` and `stmt` into one syntactic category, `BlockOrStmtType`, and now we
-can have only one rule.  We also include `BlockOrStmtType` in `Type`, as a
-replacement for the two basic types.
+条件式の型を付ける手段は:
 
-The expression statement types as expected.  Recall that we only allow
-arithmetic expressions, which type to `int`, to be used as statements in IMP++.
+1. 最初の引数が`bool`になる
+2. 枝にある文は双方`block`に評価されたら、条件式全体が`stmt`型になります。
+   
+`while`文は、左にあるの引数が`bool`になって右にあるのは`block`になるはずです。
 
-The conditional was declared `strict` in all its arguments.  Its typing policy
-is that its first argument types to `bool` and its two branches to `block`.
-If that is the case, then it yields a `stmt` type.
+変数宣言は新しい束縛を型の環境に加えるので、対応する規則は`<tenv/>`セルを変える機能が必須です。
 
-For `while`, its first argument should type to `bool` and its second to `block`.
+`print`文は２つのソート(整数も文字列も)対定義されていますね。ブロックの型付け手段の時にこのような問題を解決しましたね。それと同様に、`int`と`string`のケースを２つの独自な規則として作る必要がなくなるため、`PrintableType`という`int`も`string`も含む特別なカテゴリを作っていきます。
 
-Variable declarations add new bindings to the type environment.  Recall that
-we can only declare variables of integer type in IMP++.
+`halt`は`stmt`になって、`join`の引数が`int`になったら結局的に`stmt`になります。
 
-The typing policy of `print` is that it can only print integer or string values,
-and in that case it types to `stmt`.  Like for `BlockOrStmtType`, to avoid
-having two similar rules, one for `int` and another for `string`, we prefer to
-introduce an additional syntactic category, `PrintableType`, which includes both
-`int` and `string` types.
+順編合成は空白で区別されている`seqstrict`リストとして宣言しました。型を付ける手段は「リストが`stmt`になれるために、リストの中にある要素が全部`stmt`か`block`まで評価されるべき」ということです。
+リストは普通の cons/nil 構成で実装されるので、型付与手段を実装するのは簡単に以下のように出来ます：
 
-`halt` types to `stmt`; so its subsequent code is also typed.
-
-`join` types to `stmt`, provided that its argument types to `int`.
-
-Sequential composition was declared as a whitespace-separated sequentially
-strict list.  Its typing policy is that all the statements in the list should
-type to `stmt` or `block` in order for the list to type to `stmt`.  Since
-lists are maintained internally as cons-lists, this is probably the simplest
-way to do it:
-
+```
     rule .Stmts => stmt
     rule _:BlockOrStmtType Ss => Ss
+```
 
-Note that the first rule, which types the empty sequence of statements to `stmt`,
-is needed anyway, to type empty blocks `{}` (together with the block rule).
+空の連続を`stmt`まで評価する最初の規則は空のブロック`{}`を評価するためにも用いられます。
 
-`kompile` `imp.k` and `krun` all the programs in Part 4 of the tutorial.  They
-should all type to `stmt`.
+出来たら、`imp.k`を`kompile`して、第四章のプログラムを実行してみて下さい。それらのプログラムは全て`stmt`型まで評価されるはずです。
 
-In the next lesson we will define a substitution-based type system for LAMBDA.
+次のレッスンで、LAMBDA向けの置換に基づく型システムを定義する方法を調べていきます。
