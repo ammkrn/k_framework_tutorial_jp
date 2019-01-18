@@ -11,7 +11,6 @@
     <state color="red"> .Map </state>
 ```
 
-~~~~
 修正後:
 
 ```
