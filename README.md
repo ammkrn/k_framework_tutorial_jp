@@ -1,6 +1,6 @@
 ## 使い方
 
-このリポジトリはk-frameworkの公式チュートリアルだけ含みます。kツールズなどのこと公式k-frameworkリポ（リンクは下にあります）からダウンロード可能です。
+このリポジトリはk-frameworkの公式チュートリアルだけ含みます。チュートリアルの補助ファイル、kツールズなどのこと公式k-frameworkリポ（リンクは下にあります）からダウンロード可能です。
 <p/>
 原作: https://github.com/kframework/k/tree/master/k-distribution/tutorial 
 <p/>
